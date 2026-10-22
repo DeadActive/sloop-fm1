@@ -22,6 +22,10 @@ and not one of the SAMPLE sets. Its slice table (decoder states on a 128-point g
 slices) is written with it: SLC_BREAK_INIT.
 
 The header is cached in build/gen_samples.cache under a hash of every input.
+
+FELUCCA_SMP_DROP=BASS,VIBES,HORNS,FLUTE (the Bluetooth build, tools/build.py: its flash room) leaves those sets'
+samples out: each keeps its index, name and presets and has one zone of length 0 over every key, as every set has
+without the CC0 library (eng_sample.c: the Bluetooth build plays a sine there and says NO SAMPLE). Unset: no change.
 """
 import hashlib
 import math
@@ -350,6 +354,14 @@ class Builder:
         self.sets.append(("PERC", z0, len(self.zones) - z0))
         self.kinds["PERC"] = "kit"
 
+    def empty_set(self, name, kind):
+        """a set left out of this build (FELUCCA_SMP_DROP): its index, name and presets stay; one zone of length 0
+        over every key, the header's placeholder zone"""
+        self.sets.append((name, len(self.zones), 1))
+        self.zones.append(dict(off=0, n=0, ls=0, le=0, looped=False, sr=44100, root16=960, pred=0, idx=0, lo=0,
+                               hi=127))
+        self.kinds[name] = kind
+
     def cc0_set(self, name, kind):
         entries = []
         for k, (_, s, loop, root) in enumerate(cc0_entries(name, kind)):
@@ -433,13 +445,25 @@ class Builder:
         return f"samples: {len(self.sets)} sets, {len(self.zones)} zones, {len(self.blob)} B ADPCM{brk}"
 
 
-def input_key(have_cc0):
+def drop_sets():
+    """FELUCCA_SMP_DROP: the built-in sets this build leaves out, in CC0_SETS' order (an unknown name stops; the GM
+    kit, PERC, is not one of them: the drum lanes play it)"""
+    names = [n.strip().upper() for n in os.environ.get("FELUCCA_SMP_DROP", "").split(",") if n.strip()]
+    known = [n for n, kind in CC0_SETS if kind != "kit"]
+    bad = [n for n in names if n not in known]
+    if bad:
+        sys.exit(f"gen_samples: FELUCCA_SMP_DROP names no built-in set: {', '.join(bad)} (sets: {', '.join(known)})")
+    return [n for n in known if n in names]
+
+
+def input_key(have_cc0, drop=()):
     """hash of everything the header depends on"""
     h = hashlib.sha256()
     here = Path(__file__).resolve().parent
     for p in (here / "gen_samples.py", here / "sampleio.py"):
         h.update(p.read_bytes())
-    h.update(repr((sys.version_info[:2], have_cc0, os.environ.get("FELUCCA_SLICE") == "1")).encode())   # sum() differs across versions
+    h.update(repr((sys.version_info[:2], have_cc0, os.environ.get("FELUCCA_SLICE") == "1",
+                   *drop)).encode())   # sum() differs across versions
     files = sorted(GENDIR.glob("*.wav"))
     if have_cc0:
         files += sorted(CC0.glob("*/*.wav"))
@@ -454,9 +478,11 @@ def main(out):
     have_cc0 = CC0.exists() and any(CC0.glob("*/*.wav"))
     if not have_cc0:
         print("samples: no CC0 samples in assets/samples-cc0 - generated material only")
-    key = input_key(have_cc0)
+    drop = drop_sets()
+    key = input_key(have_cc0, drop) if drop else input_key(have_cc0)
+    cache = CACHE.with_name(f"gen_samples-{'-'.join(drop)}.cache") if drop else CACHE   # (the plain build's stays)
     try:
-        ck, summary, text = CACHE.read_text().split("\n", 2)
+        ck, summary, text = cache.read_text().split("\n", 2)
         if ck == key:
             Path(out).write_text(text)
             print(summary + " (cached)")
@@ -466,16 +492,21 @@ def main(out):
     b = Builder()
     if have_cc0:
         for name, kind in CC0_SETS:
-            if kind != "kit":                       # the CC0 KIT feeds the GM kit
+            if kind == "kit":                       # the CC0 KIT feeds the GM kit
+                continue
+            if name in drop:
+                b.empty_set(name, kind)
+            else:
                 b.cc0_set(name, kind)
     b.gm_kit(have_cc0)
     if os.environ.get("FELUCCA_SLICE") == "1":       # SLICE's BREAK: only when that engine is built
         b.slice_break()                             # last: the sets' offsets stay as they were
     text = b.header()
     Path(out).write_text(text)
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
-    CACHE.write_text(f"{key}\n{b.summary()}\n{text}")
-    print(b.summary())
+    summary = b.summary() + (f", left out: {' '.join(drop)}" if drop else "")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(f"{key}\n{summary}\n{text}")
+    print(summary)
 
 
 if __name__ == "__main__":

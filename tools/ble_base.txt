@@ -1,0 +1,6 @@
+# The Bluetooth build's base (FELUCCA_BLE=1, tools/build.py; BLE MIDI: 2026 DEADACTIVE).
+# UPSTREAM: the SLOOP release whose update path this tree carries unchanged (gate 2a, tools/check_update_path.py).
+# LOADER_SHA256: that release's update loader, build/loader/ota.bin (gate 1): a Bluetooth build stops on any other.
+# After merging a later SLOOP release: name its tag and its loader's hash here.
+UPSTREAM v2.8
+LOADER_SHA256 7024be59452cdde36e61072949d4110df09d0bc07dc19416243913632a45faa5
