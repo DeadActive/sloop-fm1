@@ -186,7 +186,7 @@ UI_SMALL static void bt_add_close(void) { btp.add = 0; }
 UI_SMALL __attribute__((noinline)) static void bt_page_on(void)
 {
     if (ble_ui_state() == BLE_ST_FAILED) {          /* the stack cannot stop: only a power cycle starts it again */
-        ui_message("POWER OFF AND ON TO RETRY");
+        ui_message("POWER CYCLE TO RETRY");
         return;
     }
     if (btp.on)
@@ -355,7 +355,7 @@ UI_SMALL static int bt_page_input(uint32_t ok, uint32_t back)
         k = btp.sel - BT_SET_ROWS;
         if (k == n) {                               /* + ADD A DEVICE */
             if (ok && st == BLE_ST_FAILED)
-                ui_message("POWER OFF AND ON TO RETRY");
+                ui_message("POWER CYCLE TO RETRY");
             else if (ok && !btp.on)
                 ui_message("BLUETOOTH IS OFF");
             else if (ok) {

@@ -37,23 +37,6 @@ UI_SMALL static int32_t batt_shown(void)
 }
 
 /* top bar: transport, BPM, octave | USB, battery, CPU; messages replace it */
-#if FELUCCA_BLE
-static uint32_t bt_head_icon(void);                    /* bt_page.c: 0 none, 1 struck (on, nothing linked), 2 lit */
-/* the Bluetooth rune in lines, 7 x 12 px, its spine at x (between the track's number and USB, x 181..187): lit amber
- * while a link is up, gray and struck through by a diagonal while Bluetooth is on and nothing is linked */
-UI_SMALL static void draw_bt_icon(int32_t x, uint32_t k)
-{
-    const int32_t t = 4, b = 15;
-    uint16_t c = k > 1u ? C_HI : C_GRAY;
-    cv_line(x, t, x, b, c);                            /* the spine, the two arrows on its right */
-    cv_line(x, t, x + 3, t + 3, c);
-    cv_line(x + 3, t + 3, x - 3, b - 3, c);
-    cv_line(x, b, x + 3, b - 3, c);
-    cv_line(x + 3, b - 3, x - 3, t + 3, c);
-    if (k == 1u)
-        cv_line(x - 3, b + 1, x + 3, t - 1, c);
-}
-#endif
 UI_SMALL static void draw_head(void)
 {
     char b[16];
@@ -125,7 +108,7 @@ UI_SMALL static void draw_head(void)
     }
 #if FELUCCA_BLE
     if (bt_head_icon())                                /* (not under a message: that takes the whole bar) */
-        draw_bt_icon(184, bt_head_icon());
+        draw_bt_icon(184, 4, bt_head_icon(), C_HI, C_GRAY);   /* (between the track's number and USB) */
 #endif
     cv_blit(0, Y_HEAD);
 }

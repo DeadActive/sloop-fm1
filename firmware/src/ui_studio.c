@@ -177,6 +177,24 @@ UI_SMALL static void loop_pos(const track_t *t, char *b)
     b[k + 2] = 0;
 }
 
+#if FELUCCA_BLE
+static uint32_t bt_head_icon(void);                    /* bt_page.c: 0 none, 1 struck (on, nothing linked), 2 lit */
+/* the Bluetooth rune in lines, 7 x 12 px, its spine at x, its top at y: lit while a link is up, dim and struck through
+ * by a diagonal while Bluetooth is on and nothing is linked (the live screens' header, te_header; the pages' top bar,
+ * ui_draw.c draw_head) */
+UI_SMALL static void draw_bt_icon(int32_t x, int32_t y, uint32_t k, uint16_t lit, uint16_t dim)
+{
+    const int32_t t = y, b = y + 11;
+    uint16_t c = k > 1u ? lit : dim;
+    cv_line(x, t, x, b, c);                            /* the spine, the two arrows on its right */
+    cv_line(x, t, x + 3, t + 3, c);
+    cv_line(x + 3, t + 3, x - 3, b - 3, c);
+    cv_line(x, b, x + 3, b - 3, c);
+    cv_line(x + 3, b - 3, x - 3, t + 3, c);
+    if (k == 1u)
+        cv_line(x - 3, b + 1, x + 3, t - 1, c);
+}
+#endif
 /* the header of the live screens: BPM, transport, the loop position, the beat lights, REC */
 UI_SMALL static void te_header(const char *title, uint16_t tc, uint32_t *cache, int32_t sect)
 {
@@ -187,6 +205,9 @@ UI_SMALL static void te_header(const char *title, uint16_t tc, uint32_t *cache, 
                                arrangement_enabled * 5u + (ui.bpm_t != 0) * 104729u + song.solo * 37u, title);
     sig = sig * 31u + tc;
     sig = sig * 31u + (uint32_t)(sect + 1) * 211u;    /* (2.7.2) the section A..D badge */
+#if FELUCCA_BLE
+    sig = sig * 31u + bt_head_icon();                  /* (the Bluetooth icon: none, struck, lit) */
+#endif
     if (!ui.force && sig == *cache)
         return;
     *cache = sig;
@@ -203,6 +224,10 @@ UI_SMALL static void te_header(const char *title, uint16_t tc, uint32_t *cache, 
     }
     for (k = 0; k < 4u; k++)                           /* the four beats of the bar */
         cv_rect(104 + (int32_t)k * 9, 26, 7, 7, playing && beat % 4u == k ? (k ? C_WHITE : TE_RED) : TE_G2);
+#if FELUCCA_BLE
+    if (bt_head_icon())                                /* after the beat lights, before click / solo */
+        draw_bt_icon(153, 23, bt_head_icon(), C_WHITE, TE_G3);
+#endif
     if (song.rec) {
         te_disc(224, 12, 8, TE_RED);
         cv_text(176, 4, &FONT_S, "rec", TE_RED);

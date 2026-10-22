@@ -10,6 +10,7 @@
  * (the settings word keeps 0..2 only: panel.c lights_word), this FM-1's Bluetooth address (bt_devs.c bt_mac), the 8
  * saved devices (24 bytes each), the radio calibration's copy (72 bytes: bt_devs.c bt_rf_io, ble/ble_vm.c), then a
  * CRC-32 of everything before it. 300 bytes.
+ * A later version may append fields (its CRC still its last 4 bytes): this one reads its own fields of it.
  *   Written after each settings save (project.c settings_write: st_save3 commits the copy, then this record goes into
  * the erased bytes of that copy's sector), so each copy carries the record as it was at its save. Read: of the two
  * copies' records the valid one with the higher sequence number (a save cut off before its record was programmed, or
@@ -33,14 +34,22 @@ _Static_assert(sizeof(bts_t) == 300u && BTS_OFF + sizeof(bts_t) <= ST_SECTOR, "t
 static bts_t bts;
 static uint8_t bts_loaded, bts_dirty;               /* read from flash; changed since the last save */
 
-UI_SMALL static int bts_valid(const bts_t *r)
-{
-    return r->magic == BTS_MAGIC && r->ver >= BTS_VER && r->len == sizeof *r && r->crc == st_crc32(r, sizeof *r - 4u);
-}
-/* the record of copy c (0 / 1) into r: 1 = a valid one */
+/* the record of copy c (0 / 1) into r: 1 = a valid one. Its CRC is its last 4 bytes, whatever its length: a later
+ * version's longer record (fields appended before its CRC) gives this version its first fields */
 UI_SMALL static int bts_read(uint32_t c, bts_t *r)
 {
-    return st_read(st_sector(OBJ_SETTINGS, c) + BTS_OFF, r, sizeof *r) == 0 && bts_valid(r);
+    uint8_t b[ST_SECTOR - BTS_OFF];                 /* (the longest record a copy's sector holds; the main loop's stack) */
+    uint32_t off = st_sector(OBJ_SETTINGS, c) + BTS_OFF, crc;
+    if (st_read(off, r, 12u) || r->magic != BTS_MAGIC || r->ver < BTS_VER || r->len < sizeof *r || r->len > sizeof b ||
+        st_read(off, b, r->len))
+        return 0;
+    memcpy(&crc, b + r->len - 4u, 4);
+    if (crc != st_crc32(b, r->len - 4u))
+        return 0;
+    memcpy(r, b, sizeof *r - 4u);
+    r->len = (uint16_t)sizeof *r;                   /* (as this version keeps it) */
+    r->crc = 0;
+    return 1;
 }
 UI_SMALL static void bts_load(void)                          /* the newer of the two copies' records, else none (all zero) */
 {

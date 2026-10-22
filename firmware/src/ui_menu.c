@@ -408,6 +408,9 @@ UI_SMALL static void menu_input(uint32_t pressed)
         if ((uint32_t)to != sec) {
             ui.menu_sel = MS_FIRST[to];
             ui.force = 1;
+#if FELUCCA_BLE
+            bt_page_show(to == MS_BT);                 /* (the Bluetooth section: its cursor and scan from this frame) */
+#endif
         }
         enc_drop();
         return;

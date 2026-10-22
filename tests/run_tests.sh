@@ -31,6 +31,11 @@ fail=0
 run() { echo "== $1"; shift; "$@" || fail=1; }
 
 [ -f build/felucca.fwsc ] || { echo "run ./build.sh first"; exit 1; }
+if grep -q "^ble_service:" build/felucca.dis 2>/dev/null; then    # (BLE MIDI: 2026 DEADACTIVE)
+    echo "build/ holds a Bluetooth build (FELUCCA_BLE=1): the budgets and the package tests are for the plain build."
+    echo "Run sh ./build.sh first."
+    exit 1
+fi
 # the generated headers the FM6 engine needs (tools/build.py generate() makes them too; no Pillow needed)
 mkdir -p build/gen
 [ build/gen/felucca_tables.h -nt tools/gen_tables.py ] || python3 tools/gen_tables.py build/gen/felucca_tables.h
@@ -176,6 +181,46 @@ if command -v node >/dev/null 2>&1; then
         run "the site without internet in Chromium (skipped without Playwright)" node tests/pwa_test.mjs "$OUT/pwa-site"
 else
     echo "== skip web tests (no node)"
+fi
+
+# the Bluetooth build (FELUCCA_BLE=1, BLE MIDI: 2026 DEADACTIVE; docs/ble/): the BLE unit's own tests (Felucca's,
+# unchanged), the gates' tools, then the core's side built as the Bluetooth build is on the UI harness (tests/bt_host.h)
+run "SAMPLE sets left out of a build (gen_samples.py FELUCCA_SMP_DROP)" python3 tests/smp_drop_test.py "$OUT/smp_drop"
+for t in ble_midi ble_scan ble_central ble_vm ble_gatt; do $CC -o "$OUT/${t}_test" "tests/ble/${t}_test.c"; done
+$CC -Wno-deprecated-declarations -Ifirmware/src/ble -o "$OUT/ble_os_test" tests/ble/ble_os_test.c
+run "BLE-MIDI parser and packer" "$OUT/ble_midi_test"
+run "BLE scan table" "$OUT/ble_scan_test"
+run "BLE central state machine, reconnecting, UUID match, monitor text" "$OUT/ble_central_test"
+run "BLE stored RF calibration (config store)" "$OUT/ble_vm_test"
+run "BLE device role: the GATT table (BLE-MIDI service, characteristic, CCCD), advertising data, scan response" "$OUT/ble_gatt_test"
+$CC -o "$OUT/fmlink_test" tests/fmlink_test.c
+run "FM-Link: two FM-1s over a simulated Bluetooth link (bursts, delays, loss, crystals apart): start, 3 min, BPM, join, STOP" "$OUT/fmlink_test"
+run "BLE OS layer (host back end)" "$OUT/ble_os_test"
+run "BLE fault path: records and reboots, never waits on interrupts" python3 tests/ble/check_ble_fatal.py
+run "gate 2 tool self-test (update path: machine code, sources)" python3 tools/check_update_path.py --selftest
+run "gate 2a: the update path's sources = the base release's (tools/ble_base.txt)" python3 tools/check_update_path.py --sources
+run "gate 3 tool self-test (BT start-up reachable at boot)" python3 tools/check_ble_boot.py --selftest
+$CC -o "$OUT/bt_store_test" tests/bt_store_test.c
+run "Bluetooth record: SLOOP 2.8's settings load as before, the record round-trips, torn / plain saves fall back" "$OUT/bt_store_test"
+BT="$CC -w -DFELUCCA_BLE=1 -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Itests"
+$BT -o "$OUT/bt_devs_test" tests/bt_devs_test.c -lm
+run "saved Bluetooth devices: the list in the record, pick order, full list, each link's device, the 30 s grace, the RF copy" "$OUT/bt_devs_test"
+$BT -o "$OUT/bt_midi_test" tests/bt_midi_test.c -lm
+run "Bluetooth MIDI: the settings, MIDI mode in (cable 3) and out, SYNC BLE, clock out, the release on a lost link" "$OUT/bt_midi_test"
+$BT -o "$OUT/smc_test" tests/smc_test.c -lm
+run "SMC-Mixer DAW layout: faders with pickup, knobs, MUTE SOLO REC SELECT, the transport, the LEDs, the mixer gone" "$OUT/smc_test"
+$BT -o "$OUT/bt_fml_test" tests/bt_fml_test.c -lm
+run "FM-Link's glue through the sequencer: SYNC INT leads, LINK follows; PLAY, STOP, BPM, its own PLAY held, no link" "$OUT/bt_fml_test"
+mkdir -p build/ui_bt
+$BT -o "$OUT/bt_page_test" tests/bt_page_test.c -lm
+run "Bluetooth page: the menu's BT section, its rows, devices, ADD, FORGET, the state line, AUTOSTART, the icon (build/ui_bt)" "$OUT/bt_page_test" build/ui_bt
+mkdir -p "$OUT/smpdrop"
+FELUCCA_SMP_DROP=BASS,VIBES,HORNS,FLUTE python3 tools/gen_samples.py "$OUT/smpdrop/felucca_samples.h" >/dev/null
+$CC -w -DFELUCCA_BLE=1 -I"$OUT/smpdrop" -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Itests -o "$OUT/bt_sample_test" tests/bt_sample_test.c -lm
+run "the Bluetooth build's sets left out: a sine at the note's pitch, NO SAMPLE once" "$OUT/bt_sample_test"
+# last of the Bluetooth part: it rebuilds build/ twice (the plain build; the same bytes when it passes)
+if [ "${GATE5:-0}" = 1 ]; then
+    run "gate 5: the plain build byte-identical without the Bluetooth files" sh tools/check_default_build.sh
 fi
 
 # the browser audio preview (web editor): the same engines in WASM as on the host, when it is built
