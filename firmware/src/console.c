@@ -258,10 +258,35 @@ static void con_params(void)
     }
 }
 
+#if FELUCCA_BLE
+static void con_fml(void)                              /* FM-Link: what the engine knows (bt_fml.c, fmlink.c) */
+{
+    fml_t f;
+    fm1_irq_off();
+    f = bt_fml;
+    fm1_irq_on();
+    con_kv("fml role (1 leader, 2 follower)", f.role);
+    con_kv("fml peer", fml_linked(&f, fm1_ticks()));
+    con_kv("fml offset_ok", f.off_ok);
+    con_kv("fml offset_us", f.off / (int32_t)(FML_MS / 1000u));
+    con_kv("fml samples_up", (int32_t)f.up_n);
+    con_kv("fml samples_down", (int32_t)f.down_n);
+    con_kv("fml leader_playing", f.l_playing);
+    con_kv("fml leader_bpm", f.l_bpm);
+    con_kv("fml playing", f.playing);
+    con_kv("fml beats_x100", (int32_t)((uint64_t)f.beats * 100u >> 16));
+    con_kv("fml joined_beat", (int32_t)(f.joined_beats >> 16));
+}
+#endif
 static void con_exec(const char *p)
 {
     if (con_word(&p, "help") || con_word(&p, "?"))
+#if FELUCCA_BLE
+        con_puts("status  dbg  crash  params  memr ADDR [LEN]  flr OFF [LEN]  cpu1 units MASK|auto  uboot yes\r\n"
+                 "ble [start | scan | list | connect N | stop]  fml\r\n");
+#else
         con_puts("status  dbg  crash  params  memr ADDR [LEN]  flr OFF [LEN]  cpu1 units MASK|auto  uboot yes\r\n");
+#endif
     else if (con_word(&p, "status"))
         con_status();
     else if (con_word(&p, "dbg"))
@@ -272,6 +297,12 @@ static void con_exec(const char *p)
         con_params();
     else if (con_word(&p, "memr"))
         con_memr(p);
+#if FELUCCA_BLE
+    else if (con_word(&p, "ble"))
+        ble_console(p);                                /* ble/ble_central.c: start, scan, list, connect N, stop, status */
+    else if (con_word(&p, "fml"))
+        con_fml();                                     /* FM-Link (bt_fml.c): the role, the peer, the offset, the leader */
+#endif
 #if FELUCCA_CPU1
     else if (con_word(&p, "cpu1")) {                     /* cpu1 units MASK | auto: the render units core 1 gets (fx.c
                                                          * units_split: bit k = synth part k, bit 3 = the drums), live */

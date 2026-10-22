@@ -129,7 +129,9 @@ def compare(dis_text, ref_text):
 KNOWN_2C = {
     # SLOOP: fm1_main (the main loop) is inlined into fm1_cstart; the FM-1 build has no console (FELUCCA_CDC=0)
     "fm1_cstart": ("it inlines the main loop, where fm1_guard_lock_top is called instead of inlined (core_ble_api.c "
-                   "core_irq_attach uses it too)", {"fm1_guard_lock_top"}, set()),
+                   "core_irq_attach uses it too); a FELUCCA_CDC=1 build's main loop also inlines the console, which has "
+                   "the `ble` word (ble_console) and the `fml` word (FM-Link's fml_linked)",
+                   {"fm1_guard_lock_top", "ble_console", "fml_linked"}, set()),
     "fm1_reboot": ("core_ble_api.c core_reboot is a second user of fm1_reboot, so it is a function of its own",
                    {"fm1__p33_op"}, set()),
     "fm1_fault_c": ("it calls fm1_reboot instead of inlining it (above)", {"fm1_reboot"}, {"fm1__p33_op"}),
