@@ -28,7 +28,7 @@ PATTERNS = [r"^usb_", r"^ep[0-4]_", r"^e0_", r"^sie_", r"^sysex_byte$", r"^midi_
             r"^fm1_cpu1_", r"^fm1_c1_",
             # SLOOP 2.8: its early USB recovery (recovery.c), the boot-loop guard (bootguard.h), main.c's start-up
             # (the low RAM's proof, the stacks' paint), the ISR timer's start and the flash's quiet erase (felucca.c)
-            r"^recovery_", r"^bootguard_", r"^lowram_", r"^stack_", r"^timer5_start$", r"^fm1_mailbox_",
+            r"^recovery_", r"^bootguard_", r"^lowram_", r"^stack_(paint|free|sp)", r"^timer5_start$", r"^fm1_mailbox_",
             r"^fm1_p33_", r"^fm1_reset_reason$", r"^fm1_supplies_", r"^fm1_wdt_arm$", r"^fm1_time_init$",
             r"^fm1_irq_init$", r"^fm1_guard_enable$", r"^fm1_guard_pc_open$"]
 # (not cdc_task: the console's commands inline into it and change with them; the CDC transport is in usb_poll)

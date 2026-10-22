@@ -236,7 +236,7 @@ int main(int argc, char **argv)
     tap(B_OCTUP);                                    /* (the cursor on ADD) */
     btp.sel = 0;
     tap(B_OCTUP);
-    ok("BLUETOOTH: after FAILED -> POWER OFF AND ON TO RETRY, no start", str_eq(ui.msg, "POWER CYCLE TO RETRY") &&
+    ok("BLUETOOTH: after FAILED -> POWER CYCLE TO RETRY, no start", str_eq(ui.msg, "POWER CYCLE TO RETRY") &&
        bs.starts == 1u);
     bs.state = BLE_ST_IDLE;
     bs.err = 0;

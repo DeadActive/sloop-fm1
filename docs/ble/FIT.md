@@ -10,7 +10,7 @@ slot (`APP_SLOT` 581,564 B). `FELUCCA_BLE=1 BLE_MEASURE=1 sh ./build.sh` measure
 | SLOOP 2.8, plain | 567,308 | 14,256 |
 | + the BLE stack (the unit, the libraries, the radio calibration's RAM code), BASS VIBES HORNS FLUTE left out | 572,092 | 9,472 |
 | + the core's side (the record, the page, MIDI, FM-Link, the SMC layout, the icon, the sine for the sets left out) | 584,468 | -2,904 |
-| **+ the boot logo as text (SLOOP's own fallback, `FELUCCA_LOGO_TEXT=1`): the build as it is** | **580,068** | **1,496** |
+| **+ the boot logo as text (SLOOP's own fallback, `FELUCCA_LOGO_TEXT=1`): the build as it is** | **580,212** | **1,352** |
 
 The four sets left out are 130,100 B of ADPCM (the user's choice, 2026-10-23: PERC, PIANO, STRGS, SCRCH stay). The
 core's side costs about 12.4 KB here (Felucca: about 12 KB with the device role), built for size (`UI_SMALL`, as
@@ -38,5 +38,5 @@ are left for the BLE unit's 31.0 KB and its 13.4 KB less what it can move; 6,368
 
 1. Accept smaller budgets in the Bluetooth build only: RAM 5.2 KB spare, pool 852 B (or any split of the 6.4 KB).
 2. Shrink one of SLOOP's buffers in the Bluetooth build by at least 6 KB (e.g. the delay line, 128 KB for 1.49 s).
-3. One core in the Bluetooth build (frees the second core's stacks in `.lowram`): excluded by the user's decision.
+3. One core in the Bluetooth build (frees the second core's stacks in `.lowram`, about 3.6 KB: not enough alone): excluded by the user's decision.
 4. A smaller BLE heap: a change to the BLE unit (layer 1), against the measured 17.9 KB high with two links.
