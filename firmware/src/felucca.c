@@ -34,6 +34,9 @@
 #ifndef FELUCCA_CPU1
 #define FELUCCA_CPU1 1          /* the second core (cpu1.c); 0: one core, as SLOOP 2.5 */
 #endif
+#ifndef FELUCCA_BLE
+#define FELUCCA_BLE 0            /* the Bluetooth build (tools/build.py FELUCCA_BLE=1): BLE MIDI, firmware/src/ble/ */
+#endif
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_900"    /* package identity (build.py: the .fwsc marker string) */
 #endif
@@ -127,7 +130,23 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)
 #include "storage.c"
 #endif
 #include "upreset.c"          /* user presets (read in the XIP window; the host test keeps a RAM mirror) */
+#if FELUCCA_BLE
+#include "bt_store.c"            /* the Bluetooth build's record in the settings' copies (past the payload) */
+#endif
 #include "project.c"
+#if FELUCCA_BLE
+#if !FELUCCA_OTA || !FELUCCA_FLASH
+#error "FELUCCA_BLE needs FELUCCA_OTA (ed_service, the main loop's hook) and FELUCCA_FLASH (its settings)"
+#endif
+#include "ble/ble_core.h"        /* the BLE unit's entry points (ble/ble.c, its own object) */
+static void bt_service(void);    /* core_ble_api.c: the BT stack's slice and the core's Bluetooth work (ed_service) */
+#include "bt_set.c"              /* MODE, AUTOSTART, ROLE, RECONNECT, SYNC BLE / LINK, in the Bluetooth record */
+#include "smc.c"                 /* the SMC-Mixer DAW layout: decode, actions, LEDs, fader pickup */
+#include "bt_midi.c"             /* MIDI mode: in (the input ring, cable 3) and out; SMC DAW mode: to smc.c */
+#include "bt_fml.c"              /* FM-Link: two FM-1s in time (fmlink.c), SYNC INT leads, SYNC LINK follows */
+#include "bt_devs.c"             /* the saved devices: the list, each link's device by the user's pick order */
+#include "bt_page.c"             /* the Bluetooth page (the menu's BT section, ui_menu.c MS_BT) */
+#endif
 #if FELUCCA_OTA
 static uint8_t recovery_active;
 #define OTA_IDENTITY (recovery_active ? "FM-1_000" : FELUCCA_ID)
@@ -194,6 +213,9 @@ static void ota_commit(const uint8_t *parm)
 #endif
 #if FELUCCA_CDC
 #include "console.c"
+#endif
+#if FELUCCA_BLE
+#include "core_ble_api.c"        /* the core functions the BLE unit calls (ble/ble_core.h) */
 #endif
 #if FELUCCA_OTA
 #include "recovery.c"        /* early, polled USB updater; no synth or settings */

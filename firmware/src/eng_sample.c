@@ -105,6 +105,23 @@ static void smp_user_scan(uint32_t k)
     slc_user_scan(k, 1);
 }
 
+#if FELUCCA_BLE
+/* the Bluetooth build leaves some built-in sets' data out (tools/gen_samples.py FELUCCA_SMP_DROP: one zone of length
+ * 0): SET si is such a set. Its notes play a sine at the note's pitch + TUNE (smp_sine) and the screen says NO SAMPLE
+ * (bt_page.c smp_notice), as Felucca's Bluetooth build */
+static int smp_set_missing(uint32_t si) { return si < SMP_NSETS && !SMP_ZONES[SMP_SETS[si].z0].n; }
+static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t tune16, int32_t lp, uint32_t *ph, int32_t *y)
+{
+    uint32_t i, p = *ph, inc = (m->inc >> 8) * (pow2_q16(tune16) >> 8);
+    int32_t s = *y;
+    for (i = 0; i < n; i++, p += inc) {
+        s += mulq15((sine_i(p) >> 1) - s, lp);
+        out[i] += mulq15(mulq15(s, amp_at(m, i)), VOICE_FS) << 1;
+    }
+    *ph = p;
+    *y = s;
+}
+#endif
 /* zone index in a voice: < 0x8000 built-in, else 0x8000 | slot << 5 | zone */
 static inline const smp_zone_t *smp_zone(uint32_t zi)
 {
@@ -159,6 +176,10 @@ static void sample_note_on(track_t *t, voice_t *v)
     v->s[2] = v->s[3] = 0;
     v->s[6] = zi == 0xFFFFu;     /* 1 = sample ended (one-shot); a kit key with no sound stays silent */
     v->s[7] = 0;                 /* lo-pass state */
+#if FELUCCA_BLE
+    if (smp_set_missing(si))
+        v->s[6] = 2;             /* 2 = a set this build left out: the sine (smp_sine; ph[0] its phase) */
+#endif
 }
 
 static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -170,6 +191,12 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
     uint32_t r = pow2_q16(d16), stepq = (r >> 8) * (z->rate >> 8);   /* Q16 samples per output */
     int32_t bits = p[P_E2], lp = 4000 + ((clamp((p[P_E4] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15);
     int32_t drv = p[P_E6], sh = bits / 10;
+#if FELUCCA_BLE
+    if (v->s[6] == 2) {                               /* a set this build left out: the sine at the note's pitch + TUNE */
+        smp_sine(out, n, m, p[P_E1] * 16, lp, &v->ph[0], &v->s[7]);
+        return;
+    }
+#endif
     if (v->s[6] || !z->n) {
         v->active = 0;
         return;

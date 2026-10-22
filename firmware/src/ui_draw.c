@@ -37,6 +37,23 @@ UI_SMALL static int32_t batt_shown(void)
 }
 
 /* top bar: transport, BPM, octave | USB, battery, CPU; messages replace it */
+#if FELUCCA_BLE
+static uint32_t bt_head_icon(void);                    /* bt_page.c: 0 none, 1 struck (on, nothing linked), 2 lit */
+/* the Bluetooth rune in lines, 7 x 12 px, its spine at x (between the track's number and USB, x 181..187): lit amber
+ * while a link is up, gray and struck through by a diagonal while Bluetooth is on and nothing is linked */
+UI_SMALL static void draw_bt_icon(int32_t x, uint32_t k)
+{
+    const int32_t t = 4, b = 15;
+    uint16_t c = k > 1u ? C_HI : C_GRAY;
+    cv_line(x, t, x, b, c);                            /* the spine, the two arrows on its right */
+    cv_line(x, t, x + 3, t + 3, c);
+    cv_line(x + 3, t + 3, x - 3, b - 3, c);
+    cv_line(x, b, x + 3, b - 3, c);
+    cv_line(x + 3, b - 3, x - 3, t + 3, c);
+    if (k == 1u)
+        cv_line(x - 3, b + 1, x + 3, t - 1, c);
+}
+#endif
 UI_SMALL static void draw_head(void)
 {
     char b[16];
@@ -46,6 +63,9 @@ UI_SMALL static void draw_head(void)
     uint32_t sig = (uint32_t)song.playing * 3u + rec * 5u + (uint32_t)(song.octave + 8) * 11u + song.sel * 13131u +
                    (ui.msg_t ? str_hash(7u, ui.msg) : 0u) + (uint32_t)song.g[G_BPM] * 101u + (ui.bpm_t != 0) * 31u +
                    (uint32_t)batt_shown() * 7777u + (usb.config && !usb.suspended) * 99991u + mlu.on * 7919u;
+#if FELUCCA_BLE
+    sig += bt_head_icon() * 2654435761u;               /* (the Bluetooth icon: none, struck, lit) */
+#endif
     if (!ui.force && sig == ui.head_sig)
         return;
     ui.head_sig = sig;
@@ -103,6 +123,10 @@ UI_SMALL static void draw_head(void)
         if (usb.config && !usb.suspended)
             cv_text(bx - 28, 1, &FONT_S, "USB", C_DIM);
     }
+#if FELUCCA_BLE
+    if (bt_head_icon())                                /* (not under a message: that takes the whole bar) */
+        draw_bt_icon(184, bt_head_icon());
+#endif
     cv_blit(0, Y_HEAD);
 }
 /* full redraw: the strips (head, columns, graph, foot) cover the rest, so only

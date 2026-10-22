@@ -47,6 +47,11 @@ static void audio_block(int32_t *out, uint32_t n)       /* mix (fx.c), then Q15 
 static volatile uint8_t shed_req;
 static uint8_t shed_over;                      /* bit k: the half k halves ago was over 85 % */
 
+#if FELUCCA_BLE
+static uint32_t audio_t0_prev, audio_gap_max;      /* the half interrupts' entries: the longest gap (ticks; nominal
+                                                    * HALF_FRAMES * 544, 2.9 ms), for the console's `ble` */
+static uint32_t bt_heard_tick;                     /* the TIMER4 tick the block being rendered is heard at (bt_fml.c) */
+#endif
 void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) */
 {
     uint8_t p;
@@ -54,6 +59,13 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
     felucca_dbg.in_audio = 1;                   /* first: TIMER5 nests from here on (main.c) */
     p = fm1_audio_pending();
     t0 = fm1_ticks();
+#if FELUCCA_BLE
+    if (p & FM1_AUDIO_HALF) {                   /* (held off: a gap longer than a half) */
+        if (t0 - audio_t0_prev > audio_gap_max)
+            audio_gap_max = t0 - audio_t0_prev;
+        audio_t0_prev = t0;
+    }
+#endif
     t5_nested_ticks = 0;
     fm1_audio_ack_aux(p);
     if (p & FM1_AUDIO_HALF) {
@@ -67,8 +79,13 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
         uac_render_start();
         usb_full_now = (uint8_t)(usb_full && uac.feed);  /* menu USB AUDIO = FULL, while the computer records */
 #endif
-        for (b = 0; b < HALF_FRAMES; b += CTL)
+        for (b = 0; b < HALF_FRAMES; b += CTL) {
+#if FELUCCA_BLE
+            bt_heard_tick = t0 + (HALF_FRAMES + b) * 544u;   /* when this block plays: a sample is 544 ticks (FM-Link,
+                                                              * as Felucca's kb_out_tick) */
+#endif
             audio_block(o + 2u * b, CTL);
+        }
         fm1_audio_ack_half();
         audio_halves++;
 #if FELUCCA_CPU1

@@ -81,12 +81,22 @@ static uint32_t trk_midi_ch(uint32_t i)    /* MIDI channel 0..15 of track i (key
     return c >= 1 && c <= 16 ? (uint32_t)c - 1u : 0xFFu;
 }
 /* a note on (vel > 0) / off to MIDI OUT on channel ch (trk_midi_ch: 0xFF, the track's MIDI OFF: nothing) */
+#if FELUCCA_BLE
+static void bt_midi_out_isr(uint32_t pkt);  /* bt_midi.c: what goes to USB MIDI out, to the BLE device too */
+static void bt_clock_block(uint32_t n);     /* bt_midi.c: MIDI clock out to the BLE device, SYNC INT */
+#define SYNC_LINK 4u                        /* G_SYNC LINK: FM-Link's follower (bt_fml.c) */
+static void bt_fml_block(uint32_t n, uint32_t *seq_n);   /* bt_fml.c: FM-Link, SYNC INT (leads) / LINK (follows) */
+#endif
 static void midi_out_note(uint32_t ch, uint32_t note, uint32_t vel)
 {
     if (ch > 15u)
         return;
     midi_out_event(vel ? 0x09u | (0x90u | ch) << 8 | (note & 127u) << 16 | (vel & 127u) << 24
                        : 0x08u | (0x80u | ch) << 8 | (note & 127u) << 16);
+#if FELUCCA_BLE
+    bt_midi_out_isr(vel ? 0x09u | (0x90u | ch) << 8 | (note & 127u) << 16 | (vel & 127u) << 24
+                        : 0x08u | (0x80u | ch) << 8 | (note & 127u) << 16);   /* (bt_midi.c: the BLE device, MIDI mode) */
+#endif
 }
 
 /* MIDI OUT of what the sequencer, the arp and the rolls play (GLO > SYSTEM > MIDI = SEQ; the keys always
@@ -2971,10 +2981,16 @@ static void clkout_block(uint32_t n)
 static void events_block(uint32_t n)
 {
     uint32_t i, pr, adv;
+#if FELUCCA_BLE
+    uint32_t bt_sn = n;                         /* the sequencer's advance in samples (FM-Link: a sample more or less) */
+#endif
     if (mo_any && !song.g[G_MIDI]) {            /* MIDI = KEYS again: end what the sequencer had sent */
         seq_out_all_off();
         mo_any = 0;
     }
+#if FELUCCA_BLE
+    bt_fml_block(n, &bt_sn);                    /* (bt_fml.c: PLAY / STOP as the link wants, before they are acted on) */
+#endif
     if (transport_req == 1u || transport_req == 3u) {
         uint32_t ext = transport_req == 3u;         /* a MIDI START: the master counts; cut a count-in short */
         transport_req = 0;
@@ -3025,7 +3041,12 @@ static void events_block(uint32_t n)
     }
     if (rec_wait && song.playing)
         rec_begin();                                /* started some other way: record now */
+#if FELUCCA_BLE
+    adv = mclk_on() && song.playing ? mclk_adv(n) : bt_sn * (uint32_t)song.g[G_BPM];
+    bt_clock_block(n);                                /* (bt_midi.c: the BLE device follows the FM-1's tempo) */
+#else
     adv = mclk_on() && song.playing ? mclk_adv(n) : n * (uint32_t)song.g[G_BPM];   /* (after a START) */
+#endif
     clkout_block(n);                                  /* (2.7) CLK OUT */
     ft_block();
 #if FELUCCA_ARRANGER
@@ -3135,7 +3156,12 @@ static void events_block(uint32_t n)
         track_t *t;
         mi_r++;
         if ((pkt & 15u) == 0xFu) {                    /* clock / transport: cable 0 USB, 1 TRS */
+#if FELUCCA_BLE
+            mclk_event((pkt >> 8) & 0xFFu, ((pkt >> 4) & 15u) == 3u ? 3u : ((pkt >> 4) & 15u) ? 2u : 1u);   /* (3: BLE,
+                                                                                    * bt_midi.c bt_midi_put) */
+#else
             mclk_event((pkt >> 8) & 0xFFu, ((pkt >> 4) & 15u) ? 2u : 1u);
+#endif
             continue;
         }
         if (song.g[G_RMCH] && ch == (uint32_t)song.g[G_RMCH] - 1u && st == 0xB0u && d1 >= REMOTE_CC0 &&

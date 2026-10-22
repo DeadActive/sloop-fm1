@@ -11,15 +11,33 @@ enum { MI_COLOR, MI_ZOOM, MI_ACCEL, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_
 #if FELUCCA_CDC
        MI_SERIAL,
 #endif
-       MI_RATE, MI_FRESO, MI_ADV, MI_DPREV, MI_CPU1, MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
+       MI_RATE, MI_FRESO, MI_ADV, MI_DPREV, MI_CPU1, MI_PANEL, MI_LCLEAR, MI_ABOUT,
+#if FELUCCA_BLE
+       MI_BT,                    /* the Bluetooth build: the BT section (bt_page.c), its one item */
+#endif
+       MI_COUNT };
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM", "KNOB ACCEL", "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO",
 #if FELUCCA_CDC
                                               "USB SERIAL",
 #endif
-                                              "USB RATE", "FILTER RESO", "STEP ADVANCE", "DRUM PREVIEW", "2ND CORE", "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
+                                              "USB RATE", "FILTER RESO", "STEP ADVANCE", "DRUM PREVIEW", "2ND CORE", "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT",
+#if FELUCCA_BLE
+                                              "BLUETOOTH",
+#endif
+                                              };
+#if FELUCCA_BLE
+enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_SEQ, MS_SYSTEM, MS_BT, MS_COUNT };   /* (the Bluetooth build: BT, bt_page.c) */
+static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "SEQ", "SYSTEM", "BT"};
+static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_ADV, MI_CPU1, MI_BT, MI_COUNT};
+static void bt_page_show(int shown);               /* bt_page.c (included after the UI) */
+static int bt_page_input(uint32_t ok, uint32_t back);
+static void bt_page_band(void);
+static uint32_t bt_page_sig(void);
+#else
 enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_SEQ, MS_SYSTEM, MS_COUNT };   /* (2.7.1: SEQ) */
 static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "SEQ", "SYSTEM"};   /* (AUDIO: and USB) */
 static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_ADV, MI_CPU1, MI_COUNT};   /* rows of each */
+#endif
 
 UI_SMALL static int mi_cpu1_have(void)                      /* the second core is running (cpu1.c; the host tests have no cpu1.c) */
 {
@@ -112,6 +130,10 @@ UI_SMALL static void draw_menu(void)
                    settings.zoom * 104729u + lights_lvl * 1299709u + lights_keys * 15485863u + ml_count() * 2654435u +
                    lights_notes * 32452843u + usb_full * 49979687u + usb_serial * 86028121u + usb_rate * 15486719u + theme_shown() * 32452867u + theme.crc + cpu1_off * 122949829u +
                    knob_accel_off * 179424673u + drum_preview * 236887691u + step_adv_off * 373587883u + flt_reso * 512927357u;
+#if FELUCCA_BLE
+    if (ui.menu == 1 && sec == MS_BT)
+        sig += bt_page_sig();                       /* (the Bluetooth section: its own state) */
+#endif
     if (!ui.force && sig == ui.menu_sig)
         return;
     ui.menu_sig = sig;
@@ -163,12 +185,25 @@ UI_SMALL static void draw_menu(void)
         } else {
             int32_t x = 4;
             for (i = 0; i < MS_COUNT; i++) {        /* the sections as tabs: this one lit */
-                int32_t w = text_w(&FONT_S, MS_NAME[i]);
+#if FELUCCA_BLE
+                const char *tn = i == MS_SYSTEM ? "SYS" : MS_NAME[i];   /* (six tabs: SYSTEM's short, the last ends at 234) */
+#else
+                const char *tn = MS_NAME[i];
+#endif
+                int32_t w = text_w(&FONT_S, tn);
                 if (i == sec)
                     cv_rect(x - 2, 3, w + 4, 18, C_LINE);
-                cv_text(x, 4, &FONT_S, MS_NAME[i], i == sec ? C_WHITE : C_DIM);
+                cv_text(x, 4, &FONT_S, tn, i == sec ? C_WHITE : C_DIM);
                 x += w + 6;                         /* (2.7.1: five sections: 6, the last ends at 236) */
             }
+#if FELUCCA_BLE
+            if (sec == MS_BT) {                     /* the Bluetooth section: its page (bt_page.c) */
+                bt_page_band();
+                cv_oy = 0;
+                cv_blit(0, H_HEAD + 1 + pass * 124u);
+                continue;
+            }
+#endif
             for (i = MS_FIRST[sec]; i < MS_FIRST[sec + 1u]; i++) {
                 uint32_t r = i - MS_FIRST[sec];
                 int32_t y = MI_Y0 + (int32_t)r * MI_DY, xv;
@@ -220,6 +255,9 @@ UI_SMALL static void enc_drop(void)                             /* knob turns no
 
 UI_SMALL static void menu_close(void)
 {
+#if FELUCCA_BLE
+    bt_page_show(0);                                   /* (the Bluetooth section's scan and list end) */
+#endif
     if (song.playing || transport_req)
         settings_later = 1;                            /* (a flash write stops the audio: once stopped) */
     else
@@ -336,6 +374,24 @@ UI_SMALL static void menu_input(uint32_t pressed)
     int32_t s;
     uint32_t k, ok = (pressed >> panel.btn[B_OCTUP]) & 1u, back = (pressed >> panel.btn[B_OCTDN]) & 1u;
     uint32_t sel = ui.menu_sel % MI_COUNT, sec = mi_sec(sel), n = MS_FIRST[sec + 1u] - MS_FIRST[sec];
+#if FELUCCA_BLE
+    bt_page_show(ui.menu == 1 && sec == MS_BT);
+    if (ui.menu == 1 && sec == MS_BT) {                /* the Bluetooth section: SELECT the section before (it is the
+                                                        * last), the rest the page's (bt_page.c) */
+        if ((s = panel_enc(EN_SELECT)) != 0) {
+            if (s < 0) {
+                ui.menu_sel = MS_FIRST[MS_BT - 1u];
+                bt_page_show(0);
+                ui.force = 1;
+            }
+            enc_drop();
+            return;
+        }
+        if (!bt_page_input(ok, back))
+            menu_close();                              /* (OCT-: as in every section) */
+        return;
+    }
+#endif
     if (back) {
         if (ui.menu == 2)
             ui.menu = 1, ui.force = 1;

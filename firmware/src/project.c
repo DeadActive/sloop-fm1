@@ -859,6 +859,10 @@ UI_SMALL static int project_used(uint32_t slot) { return proj_ok(&proj_slot[slot
  * builds wrote 32 (the map) or 36 bytes (and the channels) */
 #define MIDI_PART (2u * ML_N + 8u)
 _Static_assert(sizeof(persist_t) + sizeof(dsu_bank_t) + MIDI_PART <= ST_PAYLOAD_MAX, "the settings object fits its sector");
+#if FELUCCA_BLE
+_Static_assert(ST_PAYLOAD_OFF + sizeof(persist_t) + sizeof(dsu_bank_t) + MIDI_PART <= BTS_OFF,
+               "the Bluetooth record (bt_store.c) lies past the settings' payload");
+#endif
 static uint8_t midi_saved[MIDI_PART];
 static uint8_t drch_seed;                           /* a settings object as 2.5 wrote it: the drum channel was the
                                                      * project's then (autosave_resume takes it from a 2.5 autosave) */               /* the part as flash has it (settings_save: written when it differs) */
@@ -944,6 +948,9 @@ UI_SMALL static int settings_write(const persist_t *p)
     st_side = 0;
     if (rc)
         return -1;
+#if FELUCCA_BLE
+    (void)bts_commit();                             /* the Bluetooth record into the copy just committed (bt_store.c) */
+#endif
     dsu_dirty = 0;
     fav_dirty = 0;
     memcpy(midi_saved, mp, sizeof midi_saved);
@@ -995,7 +1002,11 @@ UI_SMALL static void settings_save(void)
     {
         uint8_t mp[MIDI_PART];
         midi_part_fill(mp);
-        if (!memcmp(&p, &persist_saved, sizeof p) && !memcmp(mp, midi_saved, sizeof mp) && !fav_dirty)
+        if (!memcmp(&p, &persist_saved, sizeof p) && !memcmp(mp, midi_saved, sizeof mp) && !fav_dirty
+#if FELUCCA_BLE
+            && !bts_dirty                          /* (the Bluetooth record, bt_store.c) */
+#endif
+            )
             return;                                /* unchanged: no erase cycle */
     }
     if (settings_write(&p) == 0)

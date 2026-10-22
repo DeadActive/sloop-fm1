@@ -1187,6 +1187,9 @@ UI_SMALL static void ed_service(void)
 {
     const uint8_t *p;
     uint32_t n;
+#if FELUCCA_BLE
+    bt_service();                                          /* the BT stack's slice (core_ble_api.c): every pass, before any return */
+#endif
     ed_sync();                                             /* v2 pushes (while watched) */
     if (!ota_frame_get(&p, &n) || n < 4u || p[0] != ED_HDR0 || p[1] != ED_HDR1 || p[2] != ED_HDR2)
         return;
