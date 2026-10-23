@@ -16,7 +16,8 @@ and the host tests only.
 - **Built-in samples:** the SAMPLE sets BASS, VIBES, HORNS and FLUTE (130 KB; the user's choice). PIANO, STRGS, SCRCH
   and the drum kit PERC stay. A sound on a set left out plays a sine at the note's pitch (SAMPLE; GRAIN plays nothing)
   and the top bar says NO SAMPLE once. Every set keeps its number and name, so projects and presets point at the same
-  sets as in the plain build. Note: track 3's default sound in a new project is LOFI FLUTE (on FLUTE): it plays the sine.
+  sets as in the plain build. A new project's track 3 is LOFI KEYS (on PIANO) in the Bluetooth build, not LOFI FLUTE
+  (the user's choice, 2026-10-23): the default project uses no set left out.
 - **The boot logo** is drawn as text (SLOOP's own fallback, `FELUCCA_LOGO_TEXT`): the flash is full otherwise.
 - Both cores stay.
 

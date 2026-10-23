@@ -30,13 +30,14 @@ three task stacks), which cannot be split (one section of `ble.o`).
 | the Bluetooth build, the reference's layout (all in the pool) | 73,460 | 24,844 | 365,280 | -21,216 | 22,772 of 25,512 |
 | **the Bluetooth build as it is** (app_ble.ld: heap and stacks in .bss; the libraries' zeroed data in .lowram and .pool) | **93,144** | **5,160** | **343,212** | **852** | **25,160 of 25,512** |
 
-All of it is static (nothing grows at run time; the stacks are elsewhere), but the budgets every Felucca port keeps
-(4 KB of `.data` + `.bss`, 8 KB of pool spare) cannot both hold: over the RAM region, the pool and the low RAM 37,360 B
-are left for the BLE unit's 31.0 KB and its 13.4 KB less what it can move; 6,368 B remain where the two budgets want
-12,288 B. **Open question for the user** (the build keeps the pool budget at 8 KB and stops on it until it is decided;
-`BLE_POOL_FLOOR=N` sets another):
+All of it is static allocation: nothing grows at run time (the core has no heap; the stacks are elsewhere), so the spare
+bytes are a margin for later changes, not for the running FM-1. The budgets every Felucca port keeps (4 KB of `.data`
++ `.bss`, 8 KB of pool spare) cannot both hold here: 6,368 B remain over the RAM region, the pool and the low RAM where
+the two want 12,288 B.
 
-1. Accept smaller budgets in the Bluetooth build only: RAM 5.2 KB spare, pool 852 B (or any split of the 6.4 KB).
-2. Shrink one of SLOOP's buffers in the Bluetooth build by at least 6 KB (e.g. the delay line, 128 KB for 1.49 s).
-3. One core in the Bluetooth build (frees the second core's stacks in `.lowram`, about 3.6 KB: not enough alone): excluded by the user's decision.
-4. A smaller BLE heap: a change to the BLE unit (layer 1), against the measured 17.9 KB high with two links.
+**The user's decision (2026-10-23): smaller margins in the Bluetooth build only.** `tools/build.py` keeps
+`BLE_RAM_FLOOR` = 4,096 B of `.data` + `.bss` (it holds: 5,160 B spare) and `BLE_POOL_FLOOR` = 512 B of pool (852 B
+spare, rounded down). The plain build's budgets are unchanged (8 KB of pool). The alternatives were: shrinking one of
+SLOOP's buffers by 6 KB in the Bluetooth build (the delay line), one core (about 3.6 KB, not enough alone, and against
+the user's decision to keep both), or a smaller BLE heap (a change to the BLE unit, against Felucca's measured 17.9 KB
+with two links).

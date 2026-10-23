@@ -48,6 +48,11 @@ SDK_MOUNT = None                    # Bluetooth builds: the JieLi BT SDK (tools/
 BLE_SMP_DROP = "BASS,VIBES,HORNS,FLUTE"   # Bluetooth builds: the built-in SAMPLE sets left out for the flash room (the
                                     # user, 2026-10-23: PERC, PIANO, STRGS, SCRCH stay; tools/gen_samples.py
                                     # FELUCCA_SMP_DROP; docs/ble/FIT.md has the measurements)
+# the Bluetooth build's spare RAM kept (the plain build's: no .data + .bss floor, 8 KiB of pool). Lower than every other
+# port's (4 KiB, 8 KiB): SLOOP's RAM holds the BLE heap and task stacks only so; all of it is static allocation (no
+# heap of the core's, the stacks elsewhere). The user's decision, 2026-10-23 (docs/ble/FIT.md)
+BLE_RAM_FLOOR = 4096
+BLE_POOL_FLOOR = 512
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 
@@ -438,12 +443,11 @@ def check(img, syms, dis, rt, ble=False, measure=False):
                      f"{sym('_rt_end') - 0x01C00000} B")
     if bss > 96 * 1024:
         (soft if ble else errors).append("RAM region overflow")
-    elif ble and 96 * 1024 - bss < 4096:          # the Bluetooth build keeps 4 KiB of .data + .bss spare (Felucca's)
-        soft.append(f"RAM headroom {96 * 1024 - bss} B < 4096 B")
-    floor = int(os.environ.get("BLE_POOL_FLOOR", "8192")) if ble else 8192
-    if 0x54000 - pool < floor:                    # keep >= 8 KiB of the pool spare (BLE_POOL_FLOOR: the Bluetooth
-        (soft if ble else errors).append(f"pool headroom {0x54000 - pool} B < {floor} B")   # build's, pending the
-                                                  # user's decision: docs/ble/FIT.md)
+    elif ble and 96 * 1024 - bss < BLE_RAM_FLOOR:
+        soft.append(f"RAM headroom {96 * 1024 - bss} B < {BLE_RAM_FLOOR} B")
+    floor = BLE_POOL_FLOOR if ble else 8192
+    if 0x54000 - pool < floor:                    # keep >= 8 KiB of the pool spare (the Bluetooth build: BLE_POOL_FLOOR)
+        (soft if ble else errors).append(f"pool headroom {0x54000 - pool} B < {floor} B")
     if ble and sym("_lr_end") > 0x01C07F00:
         soft.append(f"lowram overflow: ends at {sym('_lr_end'):#x}, past 0x1c07f00")
     return errors, notes

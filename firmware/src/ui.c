@@ -527,7 +527,13 @@ UI_SMALL static void go_home(void)
  * writes the sequencer: every pattern is the one the player records or enters. */
 
 /* the parts' sounds at power-on (engine, preset): bass, pad, lead */
+#if FELUCCA_BLE
+static const uint8_t TRK_DEF[NPART][2] = {{0, 0}, {1, 0}, {4, 9}};   /* ANALOG 808 BOOM, DIGITAL RHODES, SAMPLE LOFI KEYS
+                                                                      * (the Bluetooth build leaves FLUTE out: LOFI KEYS, on
+                                                                      * PIANO, the user's choice 2026-10-23) */
+#else
 static const uint8_t TRK_DEF[NPART][2] = {{0, 0}, {1, 0}, {4, 5}};   /* ANALOG 808 BOOM, DIGITAL RHODES, SAMPLE LOFI FLUTE */
+#endif
 UI_SMALL static uint32_t trk_def_engine(uint32_t i) { return i < NPART ? TRK_DEF[i][0] : 0u; }
 
 UI_SMALL static int seq_is_empty(const track_t *t) { return track_empty(t); }

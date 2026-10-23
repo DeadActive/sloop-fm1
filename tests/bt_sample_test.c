@@ -67,10 +67,25 @@ int main(void)
     ok("SAMPLE on BASS (left out) -> a sine at the note's pitch (440 Hz: ~20 crossings in 23 ms)", pk > 200 && c >= 18u && c <= 23u);
     pk = play(piano, &c);
     ok("SAMPLE on PIANO (in) -> its samples", pk > 200);
-    ui.msg_t = 0;
-    smp_notice();
-    ok("the default track 3 (LOFI FLUTE, a SAMPLE preset on FLUTE) -> NO SAMPLE at power-on (it plays the sine)",
-       ui.msg_t && str_eq(ui.msg, "NO SAMPLE") && ENGINES[trk[2].eng_req % NENGINES] == &ENG_SAMPLE);
+    {   /* the default project (ui.c TRK_DEF: felucca_init, NEW) never uses a set this build left out, on any track */
+        uint32_t k, clean = 1;
+        bt_ui_init();                                /* (TRK_DEF's sounds, as felucca_init sets them) */
+        for (k = 0; k < NPART; k++) {
+            const engine_t *e = ENGINES[TRK_DEF[k][0] % NENGINES];
+            const preset_t *pr = &e->presets[TRK_DEF[k][1] % e->npresets];
+            if ((e == &ENG_SAMPLE || e == &ENG_GRAIN) && smp_set_missing((uint32_t)pr->e[0] % SMP_NALL))
+                clean = 0;
+            if ((e == &ENG_SAMPLE || e == &ENG_GRAIN) && smp_set_missing((uint32_t)trk[k].p[P_E0] % SMP_NALL))
+                clean = 0;
+        }
+        ok("default project: no track's sound on a set left out", clean && !smp_set_missing((uint32_t)drum_set()));
+        ok("default project: track 3 is LOFI KEYS (on PIANO) in the Bluetooth build",
+           str_eq(ENG_SAMPLE.presets[TRK_DEF[2][1]].name, "LOFI KEYS") && TRK_DEF[2][0] == 4u);
+        ui.msg_t = 0;
+        smp_notice();
+        ok("default project: no NO SAMPLE at power-on", !ui.msg_t);
+    }
+    play(set_of("PIANO"), &c);                       /* (track 1 back on SAMPLE, a set that is in) */
     trk[1].eng_req = trk[2].eng_req = 0;            /* (the other tracks on ANALOG: track 1's notices alone) */
     smp_notice();
     ui.msg_t = 0;
